@@ -33,8 +33,8 @@ function getAiClient(): GoogleGenAI {
   if (ai) return ai;
   
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error('API_KEY environment variable is not set. Please configure it in your deployment settings.');
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('API_KEY is missing. Please add it to your Vercel Project Settings (Environment Variables).');
   }
   
   ai = new GoogleGenAI({ apiKey });
@@ -50,6 +50,9 @@ export async function* streamDefinition(
   topic: string,
 ): AsyncGenerator<string, void, undefined> {
   try {
+    if (!topic) {
+       return;
+    }
     const client = getAiClient();
     
     const prompt = `Provide a concise, single-paragraph encyclopedia-style definition for the term: "${topic}". Be informative and neutral. Do not use markdown, titles, or any special formatting. Respond with only the text of the definition itself.`;
@@ -72,7 +75,14 @@ export async function* streamDefinition(
     console.error('Error streaming from Gemini:', error);
     const errorMessage =
       error instanceof Error ? error.message : 'An unknown error occurred.';
-    yield `Error: Could not generate content for "${topic}". ${errorMessage}`;
+    
+    // If it's the API key error, don't include the topic in the message to keep it clean
+    if (errorMessage.includes('API_KEY')) {
+       yield `Configuration Error: ${errorMessage}`;
+    } else {
+       yield `Error: Could not generate content for "${topic}". ${errorMessage}`;
+    }
+    
     // Re-throwing allows the caller to handle the error state definitively.
     throw new Error(errorMessage);
   }
@@ -116,6 +126,10 @@ export async function getRandomWord(): Promise<string> {
  * @returns A promise that resolves to an object with art and optional text.
  */
 export async function generateAsciiArt(topic: string): Promise<AsciiArtData> {
+  if (!topic) {
+    throw new Error('Topic is empty');
+  }
+
   const artPromptPart = `1. "art": meta ASCII visualization of the word "${topic}":
   - Palette: │─┌┐└┘├┤┬┴┼►◄▲▼○●◐◑░▒▓█▀▄■□▪▫★☆♦♠♣♥⟨⟩/\\_|
   - Shape mirrors concept - make the visual form embody the word's essence

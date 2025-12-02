@@ -6,13 +6,26 @@ export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, '.', '');
+  
+  // Priority: 
+  // 1. process.env.API_KEY (System Env Var / Vercel Project Settings)
+  // 2. env.API_KEY (.env file)
+  const apiKey = process.env.API_KEY || env.API_KEY || '';
+
+  if (mode === 'production') {
+    if (apiKey) {
+      console.log('✅ API_KEY detected in environment variables.');
+    } else {
+      console.warn('⚠️  API_KEY is NOT set in environment variables. The app will fail to fetch content.');
+    }
+  }
+
   return {
     plugins: [react()],
     define: {
       // Polyfill process.env.API_KEY for the browser environment
-      // CRITICAL: Check both `env.API_KEY` (from .env files) AND `process.env.API_KEY` (system vars/Vercel settings)
-      // Ensure we pass an empty string if undefined so the built code doesn't contain `undefined`
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || '')
+      // CRITICAL: We JSON.stringify the value so it is injected as a string literal (e.g. "AIza...")
+      'process.env.API_KEY': JSON.stringify(apiKey)
     }
   }
 })

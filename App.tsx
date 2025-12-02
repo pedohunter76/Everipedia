@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -73,7 +72,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!currentTopic) return;
+    if (!currentTopic || currentTopic.trim() === '') return;
 
     let isCancelled = false;
 
@@ -105,7 +104,7 @@ const App: React.FC = () => {
         for await (const chunk of streamDefinition(currentTopic)) {
           if (isCancelled) break;
           
-          if (chunk.startsWith('Error:')) {
+          if (chunk.startsWith('Error:') || chunk.startsWith('Configuration Error:')) {
             throw new Error(chunk);
           }
           accumulatedContent += chunk;
@@ -194,8 +193,8 @@ const App: React.FC = () => {
 
             {error && (
               <div className="error-box">
-                <p>An Error Occurred</p>
-                <p>{error}</p>
+                <p><strong>Something went wrong</strong></p>
+                <p>{error.replace('Error: ', '').replace('Configuration Error: ', '')}</p>
               </div>
             )}
             

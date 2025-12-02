@@ -5,15 +5,6 @@
 
 import {GoogleGenAI} from '@google/genai';
 
-// This check is for development-time feedback.
-if (!process.env.API_KEY) {
-  console.error(
-    'API_KEY environment variable is not set. The application will not be able to connect to the Gemini API.',
-  );
-}
-
-// The "!" asserts API_KEY is non-null after the check.
-const ai = new GoogleGenAI({apiKey: process.env.API_KEY!});
 const artModelName = 'gemini-2.5-flash';
 const textModelName = 'gemini-2.5-flash-lite';
 /**
@@ -35,6 +26,21 @@ export interface AsciiArtData {
   text?: string; // Text is now optional
 }
 
+// Lazy initialization to prevent app crash on load if key is missing
+let ai: GoogleGenAI | null = null;
+
+function getAiClient(): GoogleGenAI {
+  if (ai) return ai;
+  
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error('API_KEY environment variable is not set. Please configure it in your deployment settings.');
+  }
+  
+  ai = new GoogleGenAI({ apiKey });
+  return ai;
+}
+
 /**
  * Streams a definition for a given topic from the Gemini API.
  * @param topic The word or term to define.
@@ -43,15 +49,12 @@ export interface AsciiArtData {
 export async function* streamDefinition(
   topic: string,
 ): AsyncGenerator<string, void, undefined> {
-  if (!process.env.API_KEY) {
-    yield 'Error: API_KEY is not configured. Please check your environment variables to continue.';
-    return;
-  }
-
-  const prompt = `Provide a concise, single-paragraph encyclopedia-style definition for the term: "${topic}". Be informative and neutral. Do not use markdown, titles, or any special formatting. Respond with only the text of the definition itself.`;
-
   try {
-    const response = await ai.models.generateContentStream({
+    const client = getAiClient();
+    
+    const prompt = `Provide a concise, single-paragraph encyclopedia-style definition for the term: "${topic}". Be informative and neutral. Do not use markdown, titles, or any special formatting. Respond with only the text of the definition itself.`;
+
+    const response = await client.models.generateContentStream({
       model: textModelName,
       contents: prompt,
       config: {
@@ -80,14 +83,12 @@ export async function* streamDefinition(
  * @returns A promise that resolves to a single random word.
  */
 export async function getRandomWord(): Promise<string> {
-  if (!process.env.API_KEY) {
-    throw new Error('API_KEY is not configured.');
-  }
-
-  const prompt = `Generate a single, random, interesting English word or a two-word concept. It can be a noun, verb, adjective, or a proper noun. Respond with only the word or concept itself, with no extra text, punctuation, or formatting.`;
-
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+
+    const prompt = `Generate a single, random, interesting English word or a two-word concept. It can be a noun, verb, adjective, or a proper noun. Respond with only the word or concept itself, with no extra text, punctuation, or formatting.`;
+
+    const response = await client.models.generateContent({
       model: textModelName,
       contents: prompt,
       config: {
@@ -115,10 +116,6 @@ export async function getRandomWord(): Promise<string> {
  * @returns A promise that resolves to an object with art and optional text.
  */
 export async function generateAsciiArt(topic: string): Promise<AsciiArtData> {
-  if (!process.env.API_KEY) {
-    throw new Error('API_KEY is not configured.');
-  }
-  
   const artPromptPart = `1. "art": meta ASCII visualization of the word "${topic}":
   - Palette: │─┌┐└┘├┤┬┴┼►◄▲▼○●◐◑░▒▓█▀▄■□▪▫★☆♦♠♣♥⟨⟩/\\_|
   - Shape mirrors concept - make the visual form embody the word's essence
@@ -142,6 +139,8 @@ Return ONLY the raw JSON object, no additional text. The response must start wit
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      const client = getAiClient();
+      
       // FIX: Construct config object conditionally to avoid spreading a boolean
       const config: any = {
         responseMimeType: 'application/json',
@@ -150,7 +149,7 @@ Return ONLY the raw JSON object, no additional text. The response must start wit
         config.thinkingConfig = { thinkingBudget: 0 };
       }
 
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
         model: artModelName,
         contents: prompt,
         config: config,
@@ -162,9 +161,6 @@ Return ONLY the raw JSON object, no additional text. The response must start wit
       }
       
       let jsonStr = text.trim();
-      
-      // Debug logging
-      console.log(`Attempt ${attempt}/${maxRetries} - Raw API response:`, jsonStr);
       
       // Remove any markdown code fences if present
       const fenceRegex = /^```(?:json)?\s*\n?(.*?)\n?\s*```$/s;
@@ -201,7 +197,7 @@ Return ONLY the raw JSON object, no additional text. The response must start wit
       console.warn(`Attempt ${attempt}/${maxRetries} failed:`, lastError.message);
       
       if (attempt === maxRetries) {
-        console.error('All retry attempts failed for ASCII art generation');
+        // Just return null/fallback logic will be handled by the caller component
         throw new Error(`Could not generate ASCII art after ${maxRetries} attempts: ${lastError.message}`);
       }
       // Continue to next attempt

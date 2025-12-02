@@ -95,7 +95,12 @@ export async function getRandomWord(): Promise<string> {
         thinkingConfig: { thinkingBudget: 0 },
       },
     });
-    return response.text.trim();
+    
+    const text = response.text;
+    if (!text) {
+       throw new Error('Received empty response from the model.');
+    }
+    return text.trim();
   } catch (error) {
     console.error('Error getting random word from Gemini:', error);
     const errorMessage =
@@ -151,7 +156,12 @@ Return ONLY the raw JSON object, no additional text. The response must start wit
         config: config,
       });
 
-      let jsonStr = response.text.trim();
+      const text = response.text;
+      if (!text) {
+        throw new Error('Received empty response from the model.');
+      }
+      
+      let jsonStr = text.trim();
       
       // Debug logging
       console.log(`Attempt ${attempt}/${maxRetries} - Raw API response:`, jsonStr);
